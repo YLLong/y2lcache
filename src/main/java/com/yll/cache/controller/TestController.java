@@ -3,11 +3,12 @@ package com.yll.cache.controller;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.yll.cache.utils.RedisUtils;
+import io.lettuce.core.RedisCommandExecutionException;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
-import org.springframework.http.MediaType;
+import org.springframework.data.annotation.Id;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -61,19 +62,26 @@ public class TestController {
         return "演示成功";
     }
 
-    @PostMapping("/setCache")
+    /**
+     * @param jsonObject
+     * @title: setCache
+     * @description: //添加缓存
+     * @author: yys1778
+     * @date: Created in 2019/3/1 13:51
+     * @throws:
+     * @return: boolean
+     */
+    @PostMapping("/cache/add")
     public boolean setCache(@RequestBody JSONObject jsonObject) {
         String key = jsonObject.getString("key");
         Object value = jsonObject.get("value");
         String item = jsonObject.getString("item");
         Long time = jsonObject.getLong("time");
-        System.out.println(key);
         boolean setFlag = false;
         if (StringUtils.isEmpty(item)) {
             if (value instanceof Map) {
                 // map 格式数据缓存
                 Map map = (Map) value;
-                System.out.println("map");
                 if (StringUtils.isEmpty(time)) {
                     setFlag = redisUtils.hmset(key, map);
                 } else {
@@ -81,7 +89,6 @@ public class TestController {
                 }
             } else if (value instanceof List) {
                 // list 格式数据缓存
-                System.out.println("list");
                 List list = (List) value;
                 if (StringUtils.isEmpty(time)) {
                     setFlag = redisUtils.lSet(key, list);
@@ -90,7 +97,6 @@ public class TestController {
                 }
             } else if (value instanceof Set) {
                 // set 格式数据缓存
-                System.out.println("set");
                 Set set = (Set) value;
                 if (StringUtils.isEmpty(time)) {
                     redisUtils.sSet(key, set);
@@ -98,7 +104,6 @@ public class TestController {
                     redisUtils.sSetAndTime(key, time, set);
                 }
             } else {
-                System.out.println("object");
                 if (StringUtils.isEmpty(time)) {
                     setFlag = redisUtils.set(key, value);
                 } else {
@@ -112,10 +117,59 @@ public class TestController {
                 setFlag = redisUtils.hset(key, item, value, time);
             }
         }
-        System.out.println(value);
-        System.out.println(item);
-        System.out.println(time);
         return setFlag;
+    }
+
+    /**
+     * @param key
+     * @param item
+     * @title: getCache
+     * @description: //根据key key/item 获取缓存
+     * @author: yys1778
+     * @date: Created in 2019/3/1 13:59
+     * @throws:
+     * @return: java.lang.Object
+     */
+    @GetMapping("/cache/get")
+    public String getCache(String key, @RequestParam(required = false) String type, @RequestParam(required = false) String item) {
+        Object object = null;
+        if (StringUtils.isEmpty(item)) {
+            if (StringUtils.isEmpty(type)) {
+                object = redisUtils.get(key);
+                return JSONObject.toJSONString(object);
+            }
+            if (type.contains("Map")) {
+                object = redisUtils.hmget(key);
+            }
+            if (type.contains("List")) {
+                object = redisUtils.lGet(key, 0, -1);
+            }
+            if (type.contains("Set")) {
+                object = redisUtils.sGet(key);
+            }
+        } else {
+            object = redisUtils.hget(key, item);
+        }
+        return JSONObject.toJSONString(object);
+    }
+
+    /**
+     * @param key
+     * @param item
+     * @title: deleteCache
+     * @description: //删除缓存
+     * @author: yys1778
+     * @date: Created in 2019/3/1 14:10
+     * @throws:
+     * @return: void
+     */
+    @DeleteMapping("/cache/delete")
+    public void deleteCache(String key, @RequestParam(required = false) String item) {
+        if (StringUtils.isEmpty(item)) {
+            redisUtils.del(key);
+        } else {
+            redisUtils.hdel(key, item);
+        }
     }
 
     @GetMapping("/setCache2")
@@ -143,6 +197,17 @@ public class TestController {
             return "远程调用成功";
         }
         return "远程调用失败";
+    }
+
+    @GetMapping("/getCache")
+    public Object getCache2() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("key", "demo4");
+        //map.put("type", "");
+        //ResponseEntity<String> entity = restTemplate.getForEntity("http://127.0.0.1:8011/redis/cache/get?key={key}&type={type}", String.class, map);
+        restTemplate.delete("http://127.0.0.1:8011/redis/cache/delete?key={key}", map);
+        //return entity.getBody();
+        return "删除成功";
     }
 
     @Data
